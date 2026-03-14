@@ -135,11 +135,15 @@ def load_and_display(file_path="data/processed/saxs_dataset.npz"):
     print(
         df[
             ["Protein_ID", "Radius_of_Gyration", "Max_Dimension", "Excluded_Volume"]
-        ].head(10)
+        ].head(20)
     )
 
     return df
 
 
-if __name__ == "__main__":
+def main():
     df = load_and_display()
+
+
+if __name__ == "__main__":
+    main()

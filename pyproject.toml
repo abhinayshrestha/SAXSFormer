@@ -10,6 +10,7 @@ authors = [
 dependencies = [
     "bio>=1.8.1",
     "fastapi>=0.135.1",
+    "matplotlib>=3.10.8",
     "numpy>=2.4.3",
     "pypdb>=2.5",
     "rcsbsearchapi>=2.0.1",
@@ -27,6 +28,7 @@ packages = ["src"]
 [project.scripts]
 get-pdb = "src.data_acquisition:main"
 view-dataset = "src.view_dataset:main"
+data-vis = "src.data_visualization:main"
 
 [dependency-groups]
 dev = [

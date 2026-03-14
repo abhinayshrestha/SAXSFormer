@@ -142,7 +142,7 @@ def load_and_display(file_path="data/processed/saxs_dataset.npz"):
 
 
 def main():
-    df = load_and_display()
+    load_and_display()
 
 
 if __name__ == "__main__":

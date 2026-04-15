@@ -39,7 +39,7 @@ SEARCH_URL = "https://search.rcsb.org/rcsbsearch/v2/query"
 DOWNLOAD_URL_TEMPLATE = "https://files.rcsb.org/download/{pdb_id}.pdb"
 
 OUTPUT_DIR = Path("data/raw_pdb")
-MAX_ROWS = 119
+MAX_ROWS = 1000
 MAX_WORKERS = 20
 REQUEST_TIMEOUT = 30
 

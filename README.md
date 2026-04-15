@@ -1,96 +1,135 @@
 # SAXSFormer: Deep Learning for Inverse SAXS Scattering
 
-**SAXSFormer** is a deep learning pipeline designed to solve the inverse scattering problem in structural biology. It automatically extracts 3D macroscopic physical properties-such as Radius of Gyration (Rg), Maximum Diameter (Dmax), and Excluded Volume-directly from 1D Small-Angle X-ray Scattering (SAXS) profiles.
+**SAXSFormer** is a deep learning pipeline designed to solve the inverse scattering problem in structural biology. It automatically extracts 3D macroscopic physical properties—such as Radius of Gyration (Rg), Maximum Diameter (Dmax), and Excluded Volume—directly from 1D Small-Angle X-ray Scattering (SAXS) profiles.
 
-## 🧬 The Scientific Problem
+## The Scientific Problem
 
 While X-ray crystallography provides static 3D snapshots of proteins, SAXS measures proteins in their natural, dynamic, liquid state. However, converting the resulting 1D SAXS intensity curve I(q) back into 3D structural parameters is a mathematically ill-posed inverse problem.
 
 Currently, extracting these parameters requires slow, subjective, manual curve-fitting by human experts (e.g., Guinier approximations). This project will try to replace that manual bottleneck with a highly optimized data engineering pipeline and a Deep Learning Transformer model capable of automated, instantaneous property extraction.
 
-## 🚀 Pipeline Architecture
+## Pipeline Architecture
 
-This repository currently contains the **Data Engineering Engine** required to generate the supervised training data for the neural network.
+This repository contains the **data engineering stack** used to build supervised training data for the model, and a **training notebook** that fits the SAXSFormer Transformer on the prepared archive.
 
-1. **Acquisition (`data_acquisition.py`):** A multithreaded network scraper that queries the RCSB Search API v2. It fetches up to 10,000 strictly filtered biological structures (Monomers, Globular, High-Resolution X-ray <= 2.0 Å).
+1. **Acquisition (`src/data_acquisition.py`):** Multithreaded downloader that queries the [RCSB Search API v2](https://search.rcsb.org/). It applies strict filters: protein-only, monomeric entries, resolution ≤ 2.0 Å, and polymer sequence length 100–400 residues. Structures are saved as `data/raw_pdb/{pdb_id}.ent` (content from the standard PDB download endpoint). Progress uses a concurrent pool with an overall progress bar. The cap on structures is controlled by `MAX_ROWS` in that module (lower it for quick tests).
 
-2. **Simulation (`data_preprocessing.py`):** Utilizes the ATSAS CRYSOL physics engine via heavily parallelized CPU processing to compute theoretical SAXS curves from the 3D atomic coordinates.
+2. **Simulation (`src/data_preprocessing.py`):** Runs the ATSAS **CRYSOL** engine in parallel over all CPU cores to produce theoretical SAXS curves and reads Rg, Dmax, and volume from the output.
 
-3. **Aggregation (`main.py`):** Parses the resulting `.abs` and `.log` files, discards the 3D coordinates (to prevent data leakage), and compiles the 1D features and scalar labels into a highly compressed, memory-mapped `.npz` tensor archive for PyTorch.
+3. **Aggregation (`main.py`):** Collects `.abs` / `.log` outputs, drops atomic coordinates to avoid leakage, and writes the compressed archive `data/processed/saxs_dataset.npz`.
 
-## 🛠️ Installation & Prerequisites
+4. **Preparation (`src/data_prepare.py`, optional):** Reads the raw archive **without modifying it** and writes `data/processed/saxs_dataset_prepared.npz`: uniform q-grid (128 points from 0.01–0.50 Å⁻¹), log-transform of intensities, and removal of samples whose labels fall outside 3×IQR per label. Use this file for training when you want a fixed q resolution and cleaned labels.
+
+5. **QA & EDA:** `src/view_dataset.py` (`view-dataset`) validates the raw `.npz`. `src/compare_npz.py` (`data-compare`) prints side-by-side summaries of raw vs prepared datasets. `src/data_visualization.py` (`data-vis`) saves figures under `reports/figures/`.
+
+6. **Training (`src/saxsformer_train.ipynb`):** End-to-end **Phase 3** workflow: load `saxs_dataset_prepared.npz`, verify GPU, train a multi-head Transformer to predict Rg, Dmax, and volume jointly, evaluate with MAE / RMSE / R² per target, and save checkpoints plus training plots. The notebook is written for **Google Colab** (dataset upload via `files.upload()`, GPU runtime). For local use, place the prepared `.npz` at `data/processed/saxs_dataset_prepared.npz`, install **PyTorch** and **scikit-learn**, and run the cells—skip or replace the Colab-specific upload cell as needed.
+
+## Repository Layout
+
+| Path | Role |
+|------|------|
+| `main.py` | Run CRYSOL over `data/raw_pdb/` and build `saxs_dataset.npz` |
+| `src/data_acquisition.py` | PDB search + download (`get-pdb`) |
+| `src/data_preprocessing.py` | CRYSOL wrapper and parsing |
+| `src/data_prepare.py` | Raw → prepared `.npz` (`data-prepare`, `--input` / `--output`) |
+| `src/view_dataset.py` | Inspect raw archive (`view-dataset`) |
+| `src/compare_npz.py` | Compare raw vs prepared (`data-compare`) |
+| `src/data_visualization.py` | EDA plots (`data-vis`) |
+| `src/saxsformer_train.ipynb` | Train / evaluate SAXSFormer on `saxs_dataset_prepared.npz` (Colab-oriented) |
+
+## Installation & Prerequisites
 
 ### 1. System Dependencies
 
-You must have the **ATSAS Suite** installed on your system, and the `crysol` command must be globally accessible in your system's PATH.
+You must have the **ATSAS Suite** installed, and the `crysol` command must be on your `PATH`.
 
 - [Download ATSAS](https://www.embl-hamburg.de/biosaxs/download.html)
 
 ### 2. Python Environment
 
-This project uses `uv` for fast dependency management.
+Requires **Python ≥ 3.13**. The project uses `uv` for dependency management.
 
 ```bash
-# Clone the repository
 git clone https://github.com/abhinayshrestha/saxsformer.git
 cd saxsformer
 
-# Install the package and dependencies in editable mode
 uv pip install -e .
 ```
 
-## 📁 Data Directory Structure
+Console scripts (from `pyproject.toml`): `get-pdb`, `view-dataset`, `data-vis`, `data-prepare`, `data-compare`. You can still run modules directly (e.g. `python src/data_prepare.py`) if you prefer.
 
-The pipeline automatically generates the following structure inside the `data/` folder(If you get error generate this folder manually):
+## Data Directory Structure
 
-- **`data/raw_pdb/`**: Contains the raw `.ent` atomic coordinate files downloaded directly from the RCSB PDB.
-- **`data/simulated_saxs/`**: Stores the individual `.abs` (1D intensity curves) and `.log` (calculated physical parameters) files generated by the CRYSOL physics engine.
-- **`data/processed/`**: Houses the final, machine-learning-ready `saxs_dataset.npz` tensor archive used for PyTorch training.
+Create a top-level `data/` directory if it is missing. The pipeline uses:
 
-## 🖥️ Usage Guide
+- **`data/raw_pdb/`** — Downloaded coordinate files (`*.ent`).
+- **`data/simulated_saxs/`** — CRYSOL `.abs` and `.log` outputs (kept for inspection and idempotent re-runs).
+- **`data/processed/`** — `saxs_dataset.npz` (raw bundle) and, after preparation, `saxs_dataset_prepared.npz`.
+- **`reports/figures/`** — PNG figures from `data-vis` or from `saxsformer_train.ipynb` (directory is created automatically; `reports/` is gitignored except what you choose to track).
+- **`checkpoints/`** — Created by `saxsformer_train.ipynb` for model weights and the fitted label scaler.
 
-The pipeline is fully idempotent. If a process drops or times out, simply re-run the command; it will instantly skip existing files and resume exactly where it left off.
+## Usage Guide
 
-### Step 1: Fetch Raw PDB Data
+The pipeline is idempotent: existing downloads and successful simulations are skipped on re-run.
 
-Downloads the raw `.ent` files from the Protein Data Bank based on strict biological criteria.
+### Step 1: Fetch structures
 
 ```bash
 get-pdb
 ```
 
-_(Note: To test with a smaller batch, edit `MAX_ROWS` in `src/data_acquisition.py`.)_
+Adjust `MAX_ROWS` in `src/data_acquisition.py` for smaller batches.
 
-### Step 2: Run the Physics Engine
-
-Fires up all available CPU cores to run CRYSOL simulations and aggregates the output into a single PyTorch-ready archive.
+### Step 2: Simulate SAXS and build the raw dataset
 
 ```bash
 python main.py
 ```
 
-### Step 3: Validate the Dataset
-
-Opens the compressed `.npz` archive and runs health checks (NaN/Inf detection, shape validation) to ensure the data is mathematically sound before neural network training.
+### Step 3: Validate the raw archive
 
 ```bash
 view-dataset
 ```
 
-## 📊 Dataset Structure
+### Step 4 (optional): Build the training-ready archive
 
-The final output is saved to `data/processed/saxs_dataset.npz`. It contains the following perfectly shaped NumPy matrices:
+```bash
+data-prepare
+# or custom paths:
+data-prepare --input data/processed/saxs_dataset.npz --output data/processed/saxs_dataset_prepared.npz
+```
 
-| **Array Key** | **Description**                                | **Shape Example** |
-| ------------- | ---------------------------------------------- | ----------------- |
-| `x`           | The 1D SAXS intensity curves I(q).             | (10000, 512)      |
-| `q`           | The momentum transfer vector q.                | (10000, 512)      |
-| `y_rg`        | **Target:** Radius of Gyration (Rg).           | (10000,)          |
-| `y_dmax`      | **Target:** Maximum particle dimension (Dmax). | (10000,)          |
-| `y_volume`    | **Target:** Excluded Volume.                   | (10000,)          |
-| `ids`         | The originating 4-letter PDB identifiers.      | (10000,)          |
+### Step 5 (optional): Compare raw vs prepared
 
-## 👨‍💻 Author
+```bash
+data-compare
+```
+
+### Step 6 (optional): EDA figures
+
+```bash
+data-vis
+```
+
+Figures are written to `reports/figures/`. Edit the `CONFIG` section at the top of `src/data_visualization.py` to change the input path, output directory, or whether plots are shown interactively.
+
+### Step 7 (optional): Train the model
+
+Open `src/saxsformer_train.ipynb` in Jupyter or Colab after you have run `data-prepare`. The notebook only needs `saxs_dataset_prepared.npz`; outputs go under `checkpoints/` and `reports/figures/` by default. Training dependencies (**torch**, **scikit-learn**) are used in the notebook but are not listed in `pyproject.toml`—install them in the environment where you run the notebook.
+
+## Dataset Structure
+
+Both archives use the same **keys**: `x`, `q`, `y_rg`, `y_dmax`, `y_volume`, `ids`.
+
+| Artifact | `x` (curves) | `q` | Notes |
+|----------|----------------|-----|--------|
+| **`saxs_dataset.npz`** | `(N, M)` linear intensity | `(M,)` or `(N, M)` — CRYSOL sampling | Written by `main.py`; `M` depends on CRYSOL settings (often on the order of hundreds of points). |
+| **`saxs_dataset_prepared.npz`** | `(N, 128)` log intensity | `(128,)` uniform 0.01–0.50 Å⁻¹ | Outliers removed; suitable as a fixed-size tensor input for training. |
+
+Example shapes for a large raw run (before preparation): `x` might look like `(10000, 512)` with `q` shaped `(512,)`, depending on your simulation grid.
+
+## Author
 
 **Abhinay Shrestha**
 

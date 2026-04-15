@@ -15,6 +15,7 @@ dependencies = [
     "pypdb>=2.5",
     "rcsbsearchapi>=2.0.1",
     "requests>=2.32.5",
+    "scipy>=1.17.1",
     "watchfiles>=1.1.1",
 ]
 
@@ -29,6 +30,8 @@ packages = ["src"]
 get-pdb = "src.data_acquisition:main"
 view-dataset = "src.view_dataset:main"
 data-vis = "src.data_visualization:main"
+data-prepare = "src.data_prepare:cli_main"
+data-compare = "src.compare_npz:main"
 
 [dependency-groups]
 dev = [

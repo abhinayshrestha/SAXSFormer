@@ -277,6 +277,61 @@ def plot_mean_plus_std_saxs_curve(
     )
 
 
+def plot_saxs_with_actual_rg(
+    x: np.ndarray,
+    q: np.ndarray,
+    y_rg: np.ndarray,
+    ids: np.ndarray,
+    output_dir: Path,
+    show: bool = SHOW_PLOTS,
+) -> None:
+    """
+    Plots up to 5 SAXS curves with their corresponding actual Rg values in the legend.
+    This clearly demonstrates the dataset's variance and the 1D-to-3D mapping.
+    """
+    num_to_plot = min(5, len(x))
+
+    fig = plt.figure(figsize=(9, 6))
+
+    # Professional color palette for high contrast
+    colors = ["#1f77b4", "#d62728", "#2ca02c", "#ff7f0e", "#9467bd"]
+
+    for i in range(num_to_plot):
+        q_vals = get_q_vector(q, i)
+        curve = x[i]
+        actual_rg = y_rg[i]
+        prot_id = ids[i]
+
+        # Create a clean label pairing the ID with the physical parameter
+        label_str = f"PDB: {prot_id} | Rg: {actual_rg:.2f} Å"
+        plt.plot(
+            q_vals, curve, color=colors[i], linewidth=2.5, alpha=0.85, label=label_str
+        )
+
+    plt.yscale("log")
+
+    # Style the axes
+    plt.xlabel(r"Momentum Transfer $q$ ($\AA^{-1}$)", fontsize=12)
+    plt.ylabel("Scattering Intensity I(q)", fontsize=12)
+    plt.title(
+        "1D SAXS Profiles & Corresponding 3D Radius of Gyration", fontsize=14, pad=15
+    )
+    plt.grid(True, which="both", ls="--", alpha=0.4)
+
+    # Modern, readable legend
+    plt.legend(
+        title="Ground Truth Mapping",
+        title_fontsize=12,
+        fontsize=11,
+        frameon=True,
+        facecolor="#f8f9fa",
+        edgecolor="#ced4da",
+        borderpad=0.8,
+    )
+
+    save_and_optionally_show(fig, output_dir / "figure8_saxs_rg_mapping.png", show)
+
+
 def main() -> None:
     """Load dataset, validate it, and generate all visualization figures."""
     if not os.path.exists(DATASET_PATH):
@@ -301,6 +356,7 @@ def main() -> None:
     plot_rg_vs_dmax(y_rg, y_dmax, output_dir)
     plot_mean_saxs_curve(x, q, output_dir)
     plot_mean_plus_std_saxs_curve(x, q, output_dir)
+    plot_saxs_with_actual_rg(x, q, y_rg, dataset["ids"], output_dir)
 
     print(f"\nSaved all figures to: {output_dir.resolve()}")
 
